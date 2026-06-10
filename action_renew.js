@@ -46,6 +46,7 @@ chromium.use(stealth);
 
 // GitHub Actions 环境下的 Chrome 路径 (通常是 google-chrome)
 const CHROME_PATH = process.env.CHROME_PATH || '/usr/bin/google-chrome';
+const DEBUG_HOST = '127.0.0.1';
 const DEBUG_PORT = 9222;
 
 // 确保 localhost 不走代理
@@ -157,8 +158,13 @@ async function checkProxy() {
 
 function checkPort(port) {
     return new Promise((resolve) => {
-        const req = http.get(`http://localhost:${port}/json/version`, (res) => {
-            resolve(true);
+        const req = http.get({ hostname: DEBUG_HOST, port, path: '/json/version', timeout: 2000 }, (res) => {
+            res.resume();
+            resolve(res.statusCode >= 200 && res.statusCode < 500);
+        });
+        req.on('timeout', () => {
+            req.destroy();
+            resolve(false);
         });
         req.on('error', () => resolve(false));
         req.end();
@@ -175,6 +181,7 @@ async function launchChrome() {
     console.log(`正在启动 Chrome (路径: ${CHROME_PATH})...`);
 
     const args = [
+        `--remote-debugging-address=${DEBUG_HOST}`,
         `--remote-debugging-port=${DEBUG_PORT}`,
         '--no-first-run',
         '--no-default-browser-check',
@@ -482,7 +489,7 @@ async function clickVisibleCaptchaCheckbox(page, modal) {
     let browser;
     for (let k = 0; k < 5; k++) {
         try {
-            browser = await chromium.connectOverCDP(`http://localhost:${DEBUG_PORT}`);
+            browser = await chromium.connectOverCDP(`http://${DEBUG_HOST}:${DEBUG_PORT}`);
             console.log('连接成功！');
             break;
         } catch (e) {
